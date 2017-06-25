@@ -73,4 +73,43 @@ def create_connection_ipv4(address, timeout=None, source_address=None,
         raise socket.error('getaddrinfo returns an empty list')
 
 
+def create_listeners(address,
+                     family=socket.AF_UNSPEC,
+                     socktype=socket.SOCK_STREAM,
+                     proto=socket.IPPROTO_IP):
+    """Uses :func:`socket.getaddrinfo` to create listening sockets for
+    available socket parameters. For example, giving *address* as
+    ``('localhost', 80)`` on a system with IPv6 would return one socket bound
+    to ``127.0.0.1`` and one bound to ``::1`.
+
+    :param address: A ``(host, port)`` tuple to listen on.
+    :param family: the socket family, default ``AF_UNSPEC``.
+    :param socktype: the socket type, default ``SOCK_STREAM``.
+    :param proto: the socket protocol, default ``IPPROTO_IP``.
+
+    """
+    if not isinstance(address, tuple) or len(address) != 2:
+        raise ValueError(address)
+    flags = socket.AI_PASSIVE
+    host, port = address
+    listeners = []
+    for res in socket.getaddrinfo(host, port, family, socktype, proto, flags):
+        fam, typ, prt, _, sockaddr = res
+        try:
+            sock = socket.socket(fam, typ, prt)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.setblocking(0)
+            sock.bind(sockaddr)
+            if sock.socktype != socket.SOCK_DGRAM:
+                sock.listen(socket.SOMAXCONN)
+        except socket.error as exc:
+            if sock.family == family:
+                raise exc
+            elif family == socket.AF_UNSPEC and not listeners:
+                raise exc
+        else:
+            listeners.append(sock)
+    return listeners
+
+
 # vim:et:fdm=marker:sts=4:sw=4:ts=4
